@@ -5,6 +5,7 @@
 //
 // Lock screen: rectangular (4 numbers in one row), inline (2, above the clock), circular (1).
 // Home screen: small or medium (all picks).
+// Next meeting: type MEETINGS in a widget's Parameter box to show your next meeting instead.
 
 const DATA_URL = "https://tmart709.github.io/cre-market-monitor/data/market.json";
 const DASHBOARD_URL = "https://tmart709.github.io/cre-market-monitor/";
@@ -20,6 +21,10 @@ const SHORT = {
   TLNRESCONS: "NONRES", CREACBW027SBOG: "CRE LOANS", DRCRELEXFACBS: "CRE DELINQ",
   "^VIX": "VIX", "DX-Y.NYB": "DXY",
 };
+
+// Meeting widget: calendar names to ignore, e.g. ["Holidays", "Birthdays"]
+const SKIP_CALENDARS = ["Holidays", "US Holidays", "Birthdays", "Siri Suggestions"];
+const MEETING_WORDS = ["MEETINGS", "MEETING", "CALENDAR", "CAL"];
 
 const fm = FileManager.local();
 const cachePath = fm.joinPath(fm.cacheDirectory(), "cre-market.json");
@@ -231,6 +236,132 @@ function buildWidget(data, keys, family) {
   return home(rows, data, family !== "small");
 }
 
+// ---- next meeting ----
+
+function amDeclined(ev) {
+  return (ev.attendees || []).some((a) => a.isCurrentUser && a.status === "declined");
+}
+
+async function upcomingEvents() {
+  const now = new Date();
+  const end = new Date(now);
+  end.setDate(end.getDate() + 1);
+  end.setHours(23, 59, 59, 0);
+  const events = await CalendarEvent.between(now, end);
+  return events
+    .filter((ev) => !ev.isAllDay && ev.endDate > now && !amDeclined(ev))
+    .filter((ev) => !SKIP_CALENDARS.includes(ev.calendar && ev.calendar.title))
+    .sort((a, b) => a.startDate - b.startDate);
+}
+
+// Join link for Teams (or Zoom/Meet/Webex) found in the event's location or notes
+function joinLink(ev) {
+  const text = `${ev.location || ""}\n${ev.notes || ""}`;
+  const m = text.match(/https:\/\/(teams\.microsoft\.com|teams\.live\.com|[\w.-]*zoom\.us|meet\.google\.com|[\w.-]*webex\.com)\/[^\s<>"')\]]+/i);
+  return m ? m[0] : null;
+}
+
+function placeName(ev) {
+  const loc = (ev.location || "").split("\n")[0].trim();
+  if (/teams/i.test(loc) || (!loc && /teams\.(microsoft|live)\.com/i.test(ev.notes || ""))) return "Teams";
+  if (/zoom\.us/i.test(loc)) return "Zoom";
+  return loc;
+}
+
+function clock(d) {
+  const df = new DateFormatter();
+  df.useNoDateStyle();
+  df.useShortTimeStyle();
+  return df.string(d);
+}
+
+function until(d) {
+  const mins = Math.max(0, Math.round((d - Date.now()) / 60000));
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function sameDay(a, b) {
+  return a.toDateString() === b.toDateString();
+}
+
+// Works out what to say: in progress, coming up, free for a while, or done for the day
+function meetingStatus(events) {
+  const now = new Date();
+  const today = events.filter((ev) => sameDay(ev.startDate, now) || ev.startDate <= now);
+  const current = today.find((ev) => ev.startDate <= now);
+  const next = today.find((ev) => ev.startDate > now);
+  if (current) {
+    return { head: "NOW", title: current.title, detail: `ends ${clock(current.endDate)}` +
+      (next ? ` · next ${clock(next.startDate)}` : ""), ev: current, short: "NOW" };
+  }
+  if (next) {
+    const mins = (next.startDate - now) / 60000;
+    const where = placeName(next) ? ` · ${placeName(next)}` : "";
+    if (mins <= 90) {
+      return { head: "NEXT MEETING", title: `${next.title} · in ${until(next.startDate)}`,
+        detail: clock(next.startDate) + where, ev: next, short: until(next.startDate) };
+    }
+    return { head: `FREE UNTIL ${clock(next.startDate)}`, title: next.title,
+      detail: `in ${until(next.startDate)}` + where, ev: next, short: until(next.startDate) };
+  }
+  const tomorrow = events.find((ev) => !sameDay(ev.startDate, now));
+  return { head: "NO MORE MEETINGS TODAY", title: tomorrow ? tomorrow.title : "Nothing on the calendar",
+    detail: tomorrow ? `Tomorrow ${clock(tomorrow.startDate)}` : "", ev: null, short: "—" };
+}
+
+// Refresh at the next moment the wording changes: event start/end, or every 5 min when close
+function meetingRefresh(status) {
+  const soon = new Date(Date.now() + 5 * 60 * 1000);
+  if (!status.ev) return new Date(Date.now() + 30 * 60 * 1000);
+  const edge = status.ev.startDate > new Date() ? status.ev.startDate : status.ev.endDate;
+  const close = edge - Date.now() < 90 * 60 * 1000;
+  return close && edge > soon ? soon : edge;
+}
+
+function meetingWidget(status, family) {
+  const w = new ListWidget();
+  if (family === "accessoryInline") {
+    const line = !status.ev ? "No more meetings today"
+      : status.short === "NOW" ? `Now · ${status.title}`
+      : status.head.startsWith("FREE") ? `Free until ${clock(status.ev.startDate)}`
+      : status.title;
+    w.addText(line);
+    return w;
+  }
+  if (family === "accessoryCircular") {
+    const s = w.addStack();
+    s.layoutVertically();
+    const top = s.addText(status.ev && status.short === "NOW" ? "MTG" : "NEXT");
+    top.font = Font.mediumSystemFont(9);
+    top.centerAlignText();
+    const v = s.addText(status.short);
+    v.font = Font.boldSystemFont(14);
+    v.lineLimit = 1;
+    v.minimumScaleFactor = 0.5;
+    v.centerAlignText();
+    return w;
+  }
+  const head = w.addText(status.head);
+  head.font = Font.mediumSystemFont(10);
+  head.textOpacity = 0.75;
+  head.lineLimit = 1;
+  head.minimumScaleFactor = 0.7;
+  const title = w.addText(status.title);
+  title.font = Font.boldSystemFont(14);
+  title.lineLimit = 1;
+  title.minimumScaleFactor = 0.6;
+  if (status.detail) {
+    const d = w.addText(status.detail);
+    d.font = Font.systemFont(11);
+    d.lineLimit = 1;
+    d.minimumScaleFactor = 0.7;
+  }
+  return w;
+}
+
 // ---- picker (runs inside the Scriptable app) ----
 
 async function choose(data) {
@@ -298,10 +429,26 @@ async function preview(widget, kind) {
 
 // ---- main ----
 
-const data = await loadData();
+const param = (args.widgetParameter || "").trim();
+const inWidget = config.runsInWidget || config.runsInAccessoryWidget;
+const meetingMode = MEETING_WORDS.includes(param.toUpperCase());
+const data = meetingMode && inWidget ? null : await loadData();
 
-if (config.runsInWidget || config.runsInAccessoryWidget) {
-  const param = (args.widgetParameter || "").trim();
+if (meetingMode && inWidget) {
+  let widget;
+  try {
+    const status = meetingStatus(await upcomingEvents());
+    widget = meetingWidget(status, config.widgetFamily);
+    widget.refreshAfterDate = meetingRefresh(status);
+    // Tap to join when the meeting is on or starts within 15 minutes; otherwise open Calendar
+    const link = status.ev && status.ev.startDate - Date.now() < 15 * 60 * 1000 ? joinLink(status.ev) : null;
+    widget.url = link || "calshow://";
+  } catch (e) {
+    widget = messageWidget("Open Scriptable and run CRE Monitor to allow calendar access");
+    widget.url = "calshow://";
+  }
+  Script.setWidget(widget);
+} else if (inWidget) {
   let keys = loadPicks();
   if (param && data) {
     const fromParam = picksFromParameter(param, allItems(data));
@@ -324,6 +471,7 @@ if (config.runsInWidget || config.runsInAccessoryWidget) {
   menu.addAction("Choose datapoints");
   menu.addAction("Preview lock screen");
   menu.addAction("Preview home screen");
+  menu.addAction("Preview next meeting");
   menu.addCancelAction("Close");
   const choice = await menu.presentSheet();
   if (choice === 0) {
@@ -333,6 +481,8 @@ if (config.runsInWidget || config.runsInAccessoryWidget) {
     await preview(buildWidget(data, loadPicks(), "accessoryRectangular"), "lock");
   } else if (choice === 2) {
     await preview(buildWidget(data, loadPicks(), "medium"), "home");
+  } else if (choice === 3) {
+    await preview(meetingWidget(meetingStatus(await upcomingEvents()), "accessoryRectangular"), "lock");
   }
 }
 Script.complete();
