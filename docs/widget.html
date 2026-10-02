@@ -290,13 +290,6 @@ async function upcomingEvents() {
     .sort((a, b) =&gt; a.startDate - b.startDate);
 }
 
-// Join link for Teams (or Zoom/Meet/Webex) found in the event's location or notes
-function joinLink(ev) {
-  const text = `${ev.location || ""}\n${ev.notes || ""}`;
-  const m = text.match(/https:\/\/(teams\.microsoft\.com|teams\.live\.com|[\w.-]*zoom\.us|meet\.google\.com|[\w.-]*webex\.com)\/[^\s&lt;&gt;"')\]]+/i);
-  return m ? m[0] : null;
-}
-
 function placeName(ev) {
   const loc = (ev.location || "").split("\n")[0].trim();
   if (/teams/i.test(loc) || (!loc &amp;&amp; /teams\.(microsoft|live)\.com/i.test(ev.notes || ""))) return "Teams";
@@ -476,13 +469,10 @@ if (meetingMode &amp;&amp; inWidget) {
     const status = meetingStatus(await upcomingEvents());
     widget = meetingWidget(status, config.widgetFamily);
     widget.refreshAfterDate = meetingRefresh(status);
-    // Tap to join when the meeting is on or starts within 15 minutes; otherwise open Calendar
-    const link = status.ev &amp;&amp; status.ev.startDate - Date.now() &lt; 15 * 60 * 1000 ? joinLink(status.ev) : null;
-    widget.url = link || "calshow://";
   } catch (e) {
     widget = messageWidget("Open Scriptable and run CRE Monitor to allow calendar access");
-    widget.url = "calshow://";
   }
+  widget.url = "calshow://";
   Script.setWidget(widget);
 } else if (inWidget) {
   let keys = loadPicks();
@@ -541,7 +531,7 @@ Script.complete();
     <li>Open Scriptable, run <b>CRE Monitor</b>, choose <b>Preview next meeting</b>, and tap <b>Allow</b> when asked for calendar access.</li>
     <li>Add another <b>Scriptable</b> widget to the lock screen, set <b>Script</b> to <b>CRE Monitor</b>, and type <code>MEETINGS</code> in its <b>Parameter</b> box.</li>
   </ol>
-  <p>It shows your next meeting with a countdown, <b>Free until</b> when nothing is soon, and <b>No more meetings today</b> after your last one. All-day events and meetings you declined are skipped. Within 15 minutes of a Teams or Zoom meeting, tapping the widget joins the call; otherwise it opens Calendar.</p>
+  <p>It shows your next meeting with a countdown, <b>Free until</b> when nothing is soon, and <b>No more meetings today</b> after your last one. All-day events and meetings you declined are skipped. Tapping the widget opens Calendar.</p>
 
   <p><a href="./">← Back to dashboard</a></p>
 </main>

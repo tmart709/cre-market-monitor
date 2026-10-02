@@ -254,13 +254,6 @@ async function upcomingEvents() {
     .sort((a, b) => a.startDate - b.startDate);
 }
 
-// Join link for Teams (or Zoom/Meet/Webex) found in the event's location or notes
-function joinLink(ev) {
-  const text = `${ev.location || ""}\n${ev.notes || ""}`;
-  const m = text.match(/https:\/\/(teams\.microsoft\.com|teams\.live\.com|[\w.-]*zoom\.us|meet\.google\.com|[\w.-]*webex\.com)\/[^\s<>"')\]]+/i);
-  return m ? m[0] : null;
-}
-
 function placeName(ev) {
   const loc = (ev.location || "").split("\n")[0].trim();
   if (/teams/i.test(loc) || (!loc && /teams\.(microsoft|live)\.com/i.test(ev.notes || ""))) return "Teams";
@@ -440,13 +433,10 @@ if (meetingMode && inWidget) {
     const status = meetingStatus(await upcomingEvents());
     widget = meetingWidget(status, config.widgetFamily);
     widget.refreshAfterDate = meetingRefresh(status);
-    // Tap to join when the meeting is on or starts within 15 minutes; otherwise open Calendar
-    const link = status.ev && status.ev.startDate - Date.now() < 15 * 60 * 1000 ? joinLink(status.ev) : null;
-    widget.url = link || "calshow://";
   } catch (e) {
     widget = messageWidget("Open Scriptable and run CRE Monitor to allow calendar access");
-    widget.url = "calshow://";
   }
+  widget.url = "calshow://";
   Script.setWidget(widget);
 } else if (inWidget) {
   let keys = loadPicks();
