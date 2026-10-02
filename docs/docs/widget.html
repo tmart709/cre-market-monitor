@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRE Widget Setup</title>
+<style>
+  :root { --bg:#f6f5f1; --surface:#fff; --text:#1b1d21; --muted:#6b6f78; --border:#e3e1da; --accent:#2f5d8a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14161a; --surface:#1d2025; --text:#eceef1; --muted:#9aa0aa; --border:#2e3239; --accent:#7fb0e0; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:24px 16px 40px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  h2 { font-size:17px; margin:28px 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 20px; }
+  ol { padding-left:22px; } li { margin:6px 0; }
+  code { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:1px 5px; font-size:14px; }
+  button { width:100%; padding:14px; font:600 17px/1 inherit; border:none; border-radius:12px; background:var(--accent); color:#fff; cursor:pointer; margin:8px 0 16px; }
+  pre { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:11px; max-height:240px; overflow:auto; white-space:pre; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lock screen widget</h1>
+  <p class="sub">Your choice of up to 4 datapoints on your iPhone lock screen. Change them anytime.</p>
+
+  <h2>Set up (once)</h2>
+  <ol>
+    <li>Install <a href="https://apps.apple.com/app/scriptable/id1405459188">Scriptable</a> from the App Store (free).</li>
+    <li>Tap <b>Copy script</b> below.</li>
+    <li>Open Scriptable, tap <b>+</b>, paste, and rename it <b>CRE Monitor</b> (tap the title at the top). Tap <b>Done</b>.</li>
+    <li>Lock your phone, press and hold the lock screen, tap <b>Customize → Lock Screen</b>, tap the widget area under the clock, choose <b>Scriptable</b>, and add the wide rectangle.</li>
+    <li>Tap the new widget, set <b>Script</b> to <b>CRE Monitor</b>, then tap <b>Done</b>.</li>
+  </ol>
+  <button id="copy">Copy script</button>
+  <pre id="code">// CRE Market Monitor widget for Scriptable (iPhone)
+//
+// Change what's shown: open Scriptable, tap this script, choose "Choose datapoints".
+// Per-widget override: type short names in the widget's Parameter box, e.g. 10Y, BBB, LUMBER
+//
+// Lock screen: rectangular (4 numbers), inline (2, above the clock), circular (1).
+// Home screen: small or medium (all picks).
+
+const DATA_URL = "https://tmart709.github.io/cre-market-monitor/data/market.json";
+const DASHBOARD_URL = "https://tmart709.github.io/cre-market-monitor/";
+const MAX_PICKS = 4;
+const DEFAULT_PICKS = ["yahoo:^TNX", "fred:SOFR", "yahoo:CL=F", "yahoo:HRC=F"];
+
+// Short names for the lock screen; anything not listed uses its ticker symbol
+const SHORT = {
+  "^TNX": "10Y", "^FVX": "5Y", "^TYX": "30Y", "^IRX": "3M", DGS2: "2Y", DGS7: "7Y",
+  SOFR: "SOFR", DFF: "FED", BAMLC0A4CBBB: "BBB", MORTGAGE30US: "MTG",
+  "HRC=F": "STEEL", "LBR=F": "LUMBER", "HG=F": "COPPER", "CL=F": "OIL", "BZ=F": "BRENT", "HO=F": "DIESEL",
+  WPUSI012011: "CONST PPI", WPU1017: "STEEL PPI", PCU327320327320: "CONCRETE",
+  TLNRESCONS: "NONRES", CREACBW027SBOG: "CRE LOANS", DRCRELEXFACBS: "CRE DELINQ",
+  "^VIX": "VIX", "DX-Y.NYB": "DXY",
+};
+
+const fm = FileManager.local();
+const cachePath = fm.joinPath(fm.cacheDirectory(), "cre-market.json");
+const picksPath = fm.joinPath(fm.documentsDirectory(), "cre-picks.json");
+
+// ---- data ----
+
+async function loadData() {
+  try {
+    const req = new Request(DATA_URL + "?t=" + Date.now());
+    req.timeoutInterval = 15;
+    const data = await req.loadJSON();
+    fm.writeString(cachePath, JSON.stringify(data));
+    return data;
+  } catch (e) {
+    if (fm.fileExists(cachePath)) return JSON.parse(fm.readString(cachePath));
+    return null;
+  }
+}
+
+function allItems(data) {
+  const out = [];
+  for (const g of data.groups) for (const i of g.items) out.push(i);
+  return out;
+}
+
+function shortName(item) {
+  return SHORT[item.symbol] || item.symbol.replace(/^\^/, "").replace(/=F$/, "");
+}
+
+function loadPicks() {
+  try {
+    if (fm.fileExists(picksPath)) return JSON.parse(fm.readString(picksPath));
+  } catch (e) {}
+  return DEFAULT_PICKS.slice();
+}
+
+function savePicks(keys) {
+  fm.writeString(picksPath, JSON.stringify(keys));
+}
+
+// Widget Parameter like "10Y, BBB, LUMBER" (short names, tickers or labels)
+function picksFromParameter(param, items) {
+  const wanted = param.split(",").map((s) =&gt; s.trim().toUpperCase()).filter(Boolean);
+  const keys = [];
+  for (const w of wanted) {
+    const hit = items.find((i) =&gt;
+      shortName(i).toUpperCase() === w || i.symbol.toUpperCase() === w || i.label.toUpperCase() === w);
+    if (hit &amp;&amp; !keys.includes(hit.key)) keys.push(hit.key);
+  }
+  return keys;
+}
+
+function picked(data, keys) {
+  const byKey = {};
+  for (const i of allItems(data)) byKey[i.key] = i;
+  return keys.map((k) =&gt; byKey[k]).filter(Boolean).map((item) =&gt; ({ item, short: shortName(item) }));
+}
+
+// ---- formatting ----
+
+function fmtValue(item) {
+  const v = item.value;
+  switch (item.unit) {
+    case "pct": return v.toFixed(2) + "%";
+    case "index": return v.toFixed(Math.abs(v) &gt;= 100 ? 1 : 2);
+    case "bn": return "$" + Math.round(v).toLocaleString("en-US") + "B";
+    default: return Math.abs(v) &gt;= 1000 ? "$" + Math.round(v).toLocaleString("en-US") : "$" + v.toFixed(2);
+  }
+}
+
+function fmtChange(item) {
+  if (item.prev == null) return { text: "", dir: 0 };
+  const diff = item.value - item.prev;
+  const dir = Math.abs(diff) &lt; 1e-9 ? 0 : diff &gt; 0 ? 1 : -1;
+  const arrow = dir &gt; 0 ? "▲" : dir &lt; 0 ? "▼" : "•";
+  if (item.unit === "pct") return { text: `${arrow}${Math.abs(diff * 100).toFixed(0)}bp`, dir };
+  const pct = item.prev ? Math.abs(diff / item.prev) * 100 : 0;
+  return { text: `${arrow}${pct.toFixed(1)}%`, dir };
+}
+
+function ago(iso) {
+  const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (mins &lt; 60) return `${mins}m ago`;
+  return `${Math.round(mins / 60)}h ago`;
+}
+
+// ---- lock screen widgets ----
+
+function rectangular(rows) {
+  const w = new ListWidget();
+  const grid = w.addStack();
+  grid.layoutVertically();
+  for (let r = 0; r &lt; 2; r++) {
+    const line = grid.addStack();
+    line.layoutHorizontally();
+    for (let c = 0; c &lt; 2; c++) {
+      const p = rows[r * 2 + c];
+      const cell = line.addStack();
+      cell.layoutVertically();
+      cell.size = new Size(78, 0);
+      if (p) {
+        const ch = fmtChange(p.item);
+        const top = cell.addText(`${p.short} ${ch.text}`);
+        top.font = Font.mediumSystemFont(10);
+        top.textOpacity = 0.75;
+        top.lineLimit = 1;
+        top.minimumScaleFactor = 0.6;
+        const val = cell.addText(fmtValue(p.item));
+        val.font = Font.boldSystemFont(15);
+        val.lineLimit = 1;
+        val.minimumScaleFactor = 0.6;
+      }
+    }
+    if (r === 0) grid.addSpacer(3);
+  }
+  return w;
+}
+
+function inline(rows) {
+  const w = new ListWidget();
+  w.addText(rows.slice(0, 2).map((p) =&gt; `${p.short} ${fmtValue(p.item)}`).join(" · "));
+  return w;
+}
+
+function circular(rows) {
+  const w = new ListWidget();
+  const p = rows[0];
+  const s = w.addStack();
+  s.layoutVertically();
+  s.centerAlignContent();
+  const label = s.addText(p.short);
+  label.font = Font.mediumSystemFont(9);
+  label.lineLimit = 1;
+  label.minimumScaleFactor = 0.6;
+  label.centerAlignText();
+  const val = s.addText(fmtValue(p.item).replace("%", ""));
+  val.font = Font.boldSystemFont(14);
+  val.lineLimit = 1;
+  val.minimumScaleFactor = 0.5;
+  val.centerAlignText();
+  return w;
+}
+
+// ---- home screen widget ----
+
+function home(rows, data, medium) {
+  const w = new ListWidget();
+  w.backgroundColor = Color.dynamic(new Color("#ffffff"), new Color("#1d2025"));
+  w.setPadding(12, 14, 12, 14);
+  const up = Color.dynamic(new Color("#1f7a4d"), new Color("#4cc28a"));
+  const down = Color.dynamic(new Color("#b3372f"), new Color("#f07a70"));
+  const muted = Color.dynamic(new Color("#6b6f78"), new Color("#9aa0aa"));
+  const text = Color.dynamic(new Color("#1b1d21"), new Color("#eceef1"));
+
+  const title = w.addText("CRE Monitor");
+  title.font = Font.semiboldSystemFont(11);
+  title.textColor = muted;
+  w.addSpacer(6);
+
+  for (const p of rows) {
+    const line = w.addStack();
+    line.centerAlignContent();
+    const label = line.addText(medium ? p.item.label : p.short);
+    label.font = Font.mediumSystemFont(medium ? 13 : 12);
+    label.textColor = text;
+    label.lineLimit = 1;
+    label.minimumScaleFactor = 0.7;
+    line.addSpacer();
+    const val = line.addText(fmtValue(p.item));
+    val.font = Font.boldSystemFont(medium ? 14 : 13);
+    val.textColor = text;
+    if (medium) {
+      line.addSpacer(8);
+      const ch = fmtChange(p.item);
+      const box = line.addStack();
+      box.size = new Size(58, 0);
+      box.addSpacer();
+      const c = box.addText(ch.text);
+      c.font = Font.semiboldSystemFont(12);
+      c.textColor = ch.dir &gt; 0 ? up : ch.dir &lt; 0 ? down : muted;
+    }
+    w.addSpacer(4);
+  }
+
+  w.addSpacer();
+  const foot = w.addText(`Updated ${ago(data.updated)}`);
+  foot.font = Font.systemFont(9);
+  foot.textColor = muted;
+  return w;
+}
+
+function messageWidget(msg) {
+  const w = new ListWidget();
+  const t = w.addText(msg);
+  t.font = Font.systemFont(12);
+  return w;
+}
+
+function buildWidget(data, keys, family) {
+  if (!data) return messageWidget("CRE Monitor: no data yet");
+  const rows = picked(data, keys);
+  if (!rows.length) return messageWidget("CRE Monitor: open Scriptable to choose datapoints");
+  if (family === "accessoryRectangular") return rectangular(rows);
+  if (family === "accessoryInline") return inline(rows);
+  if (family === "accessoryCircular") return circular(rows);
+  return home(rows, data, family !== "small");
+}
+
+// ---- picker (runs inside the Scriptable app) ----
+
+async function choose(data) {
+  const selected = loadPicks();
+  const table = new UITable();
+  table.showSeparators = true;
+
+  const render = () =&gt; {
+    table.removeAllRows();
+    const head = new UITableRow();
+    head.isHeader = true;
+    head.height = 70;
+    head.addText(
+      `Pick up to ${MAX_PICKS} (${selected.length}/${MAX_PICKS})`,
+      "Tap to add or remove. Swipe down when done."
+    );
+    table.addRow(head);
+
+    for (const g of data.groups) {
+      const gh = new UITableRow();
+      gh.isHeader = true;
+      gh.addText(g.name.toUpperCase()).titleFont = Font.semiboldSystemFont(12);
+      table.addRow(gh);
+
+      for (const item of g.items) {
+        const pos = selected.indexOf(item.key);
+        const row = new UITableRow();
+        row.dismissOnSelect = false;
+        row.height = 52;
+        const mark = row.addText(pos &gt;= 0 ? String(pos + 1) : "");
+        mark.widthWeight = 8;
+        mark.titleFont = Font.boldSystemFont(16);
+        mark.titleColor = Color.blue();
+        const name = row.addText(item.label, shortName(item));
+        name.widthWeight = 62;
+        name.subtitleColor = Color.gray();
+        const val = row.addText(fmtValue(item));
+        val.widthWeight = 30;
+        val.rightAligned();
+        row.onSelect = () =&gt; {
+          const at = selected.indexOf(item.key);
+          if (at &gt;= 0) selected.splice(at, 1);
+          else if (selected.length &lt; MAX_PICKS) selected.push(item.key);
+          render();
+          table.reload();
+        };
+        table.addRow(row);
+      }
+    }
+  };
+
+  render();
+  await table.present(false);
+  savePicks(selected);
+  return selected;
+}
+
+async function preview(widget, kind) {
+  if (kind === "lock" &amp;&amp; typeof widget.presentAccessoryRectangular === "function") {
+    await widget.presentAccessoryRectangular();
+  } else {
+    await widget.presentMedium();
+  }
+}
+
+// ---- main ----
+
+const data = await loadData();
+
+if (config.runsInWidget || config.runsInAccessoryWidget) {
+  const param = (args.widgetParameter || "").trim();
+  let keys = loadPicks();
+  if (param &amp;&amp; data) {
+    const fromParam = picksFromParameter(param, allItems(data));
+    if (fromParam.length) keys = fromParam;
+  }
+  const widget = buildWidget(data, keys, config.widgetFamily);
+  widget.url = DASHBOARD_URL;
+  widget.refreshAfterDate = new Date(Date.now() + 30 * 60 * 1000);
+  Script.setWidget(widget);
+} else if (!data) {
+  const a = new Alert();
+  a.title = "No data";
+  a.message = "Couldn't reach the dashboard. Check your connection and try again.";
+  a.addAction("OK");
+  await a.present();
+} else {
+  const menu = new Alert();
+  menu.title = "CRE Monitor";
+  menu.message = "Showing: " + picked(data, loadPicks()).map((p) =&gt; p.short).join(", ");
+  menu.addAction("Choose datapoints");
+  menu.addAction("Preview lock screen");
+  menu.addAction("Preview home screen");
+  menu.addCancelAction("Close");
+  const choice = await menu.presentSheet();
+  if (choice === 0) {
+    const keys = await choose(data);
+    await preview(buildWidget(data, keys, "accessoryRectangular"), "lock");
+  } else if (choice === 1) {
+    await preview(buildWidget(data, loadPicks(), "accessoryRectangular"), "lock");
+  } else if (choice === 2) {
+    await preview(buildWidget(data, loadPicks(), "medium"), "home");
+  }
+}
+Script.complete();
+</pre>
+
+  <h2>Change what's shown</h2>
+  <ol>
+    <li>Open Scriptable and tap <b>CRE Monitor</b>.</li>
+    <li>Choose <b>Choose datapoints</b>. Tap items to add or remove them (up to 4; the numbers show the order).</li>
+    <li>Swipe the list down to save. The lock screen updates at its next refresh, usually within 15 to 30 minutes.</li>
+  </ol>
+
+  <h2>Different numbers on different widgets (optional)</h2>
+  <p>Press and hold a widget to edit it, then type short names into its <b>Parameter</b> box, for example
+  <code>10Y, BBB, LUMBER</code>. That widget then ignores your saved picks. Short names are shown under each item in the picker.</p>
+
+  <p><a href="./">← Back to dashboard</a></p>
+</main>
+<script>
+  document.getElementById("copy").addEventListener("click", async (e) => {
+    const text = document.getElementById("code").textContent;
+    try { await navigator.clipboard.writeText(text); }
+    catch { const r = document.createRange(); r.selectNodeContents(document.getElementById("code")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand("copy"); }
+    e.target.textContent = "Copied ✓";
+    setTimeout(() => (e.target.textContent = "Copy script"), 2500);
+  });
+</script>
+</body>
+</html>
