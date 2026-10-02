@@ -1,0 +1,66 @@
+# What the dashboard tracks. Edit this file to add or remove anything.
+#
+# source:  yahoo = market prices, refreshed every hour while markets trade
+#          fred  = official government data (daily, weekly, monthly or quarterly)
+# unit:    pct   = a rate or yield (changes shown in basis points)
+#          usd   = a price in dollars
+#          index = an index level
+#          bn    = billions of dollars
+# scale:   optional multiplier (e.g. 0.001 turns millions into billions)
+# note:    optional small text under the name (keep it in quotes)
+#
+# Find more: Yahoo symbols at finance.yahoo.com, FRED series IDs at fred.stlouisfed.org
+
+groups:
+  - name: Rates & Financing
+    items:
+      - {label: "10-Year Treasury", symbol: "^TNX", source: yahoo, unit: pct, note: "Live"}
+      - {label: "5-Year Treasury", symbol: "^FVX", source: yahoo, unit: pct, note: "Live"}
+      - {label: "30-Year Treasury", symbol: "^TYX", source: yahoo, unit: pct, note: "Live"}
+      - {label: "3-Month T-Bill", symbol: "^IRX", source: yahoo, unit: pct, note: "Live"}
+      - {label: "2-Year Treasury", symbol: "DGS2", source: fred, unit: pct, note: "Official daily"}
+      - {label: "7-Year Treasury", symbol: "DGS7", source: fred, unit: pct, note: "Official daily"}
+      - {label: "SOFR", symbol: "SOFR", source: fred, unit: pct, note: "Floating-rate loan benchmark"}
+      - {label: "Fed Funds Rate", symbol: "DFF", source: fred, unit: pct, note: "Daily"}
+      - {label: "BBB Corporate Spread", symbol: "BAMLC0A4CBBB", source: fred, unit: pct, note: "Credit risk premium"}
+      - {label: "30-Yr Mortgage Rate", symbol: "MORTGAGE30US", source: fred, unit: pct, note: "Weekly"}
+
+  - name: Construction Costs
+    items:
+      - {label: "Steel (Hot-Rolled Coil)", symbol: "HRC=F", source: yahoo, unit: usd, note: "Futures, per short ton"}
+      - {label: "Lumber", symbol: "LBR=F", source: yahoo, unit: usd, note: "Futures, per 1,000 board ft"}
+      - {label: "Copper", symbol: "HG=F", source: yahoo, unit: usd, note: "Futures, per lb"}
+      - {label: "WTI Crude Oil", symbol: "CL=F", source: yahoo, unit: usd, note: "Futures, per barrel"}
+      - {label: "Brent Crude Oil", symbol: "BZ=F", source: yahoo, unit: usd, note: "Futures, per barrel"}
+      - {label: "Diesel (ULSD)", symbol: "HO=F", source: yahoo, unit: usd, note: "Futures, per gallon"}
+      - {label: "Construction Inputs PPI", symbol: "WPUSI012011", source: fred, unit: index, note: "Monthly producer prices"}
+      - {label: "Steel Mill Products PPI", symbol: "WPU1017", source: fred, unit: index, note: "Monthly"}
+      - {label: "Ready-Mix Concrete PPI", symbol: "PCU327320327320", source: fred, unit: index, note: "Monthly"}
+
+  - name: CRE Market
+    items:
+      - {label: "US REITs (VNQ)", symbol: "VNQ", source: yahoo, unit: usd, note: "Broad real estate index fund"}
+      - {label: "Regional Banks (KRE)", symbol: "KRE", source: yahoo, unit: usd, note: "Major CRE lenders"}
+      - {label: "CBRE Group", symbol: "CBRE", source: yahoo, unit: usd, note: "Brokerage and services"}
+      - {label: "Nonresidential Construction", symbol: "TLNRESCONS", source: fred, unit: bn, scale: 0.001, note: "Monthly spending, annual rate"}
+      - {label: "Bank CRE Loans", symbol: "CREACBW027SBOG", source: fred, unit: bn, note: "Weekly, all commercial banks"}
+      - {label: "CRE Loan Delinquency", symbol: "DRCRELEXFACBS", source: fred, unit: pct, note: "Quarterly, banks"}
+
+  - name: Property Sectors
+    items:
+      - {label: "Office: BXP", symbol: "BXP", source: yahoo, unit: usd}
+      - {label: "Office: Vornado", symbol: "VNO", source: yahoo, unit: usd}
+      - {label: "Industrial: Prologis", symbol: "PLD", source: yahoo, unit: usd}
+      - {label: "Multifamily: Equity Residential", symbol: "EQR", source: yahoo, unit: usd}
+      - {label: "Retail: Simon Property", symbol: "SPG", source: yahoo, unit: usd}
+      - {label: "Net Lease: Realty Income", symbol: "O", source: yahoo, unit: usd}
+      - {label: "Data Centers: Equinix", symbol: "EQIX", source: yahoo, unit: usd}
+      - {label: "Self-Storage: Public Storage", symbol: "PSA", source: yahoo, unit: usd}
+      - {label: "Healthcare: Welltower", symbol: "WELL", source: yahoo, unit: usd}
+      - {label: "Hotels: Host Hotels", symbol: "HST", source: yahoo, unit: usd}
+
+  - name: Broad Market
+    items:
+      - {label: "S&P 500 (SPY)", symbol: "SPY", source: yahoo, unit: usd}
+      - {label: "Volatility (VIX)", symbol: "^VIX", source: yahoo, unit: index, note: "Market fear gauge"}
+      - {label: "US Dollar Index", symbol: "DX-Y.NYB", source: yahoo, unit: index}
