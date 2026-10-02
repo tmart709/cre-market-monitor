@@ -39,7 +39,7 @@
 // Change what's shown: open Scriptable, tap this script, choose "Choose datapoints".
 // Per-widget override: type short names in the widget's Parameter box, e.g. 10Y, BBB, LUMBER
 //
-// Lock screen: rectangular (4 numbers), inline (2, above the clock), circular (1).
+// Lock screen: rectangular (4 numbers in one row), inline (2, above the clock), circular (1).
 // Home screen: small or medium (all picks).
 
 const DATA_URL = "https://tmart709.github.io/cre-market-monitor/data/market.json";
@@ -146,32 +146,34 @@ function ago(iso) {
 // ---- lock screen widgets ----
 
 function rectangular(rows) {
+  // One row of up to 4 metrics: short name, value, change
   const w = new ListWidget();
-  const grid = w.addStack();
-  grid.layoutVertically();
-  for (let r = 0; r &lt; 2; r++) {
-    const line = grid.addStack();
-    line.layoutHorizontally();
-    for (let c = 0; c &lt; 2; c++) {
-      const p = rows[r * 2 + c];
-      const cell = line.addStack();
-      cell.layoutVertically();
-      cell.size = new Size(78, 0);
-      if (p) {
-        const ch = fmtChange(p.item);
-        const top = cell.addText(`${p.short} ${ch.text}`);
-        top.font = Font.mediumSystemFont(10);
-        top.textOpacity = 0.75;
-        top.lineLimit = 1;
-        top.minimumScaleFactor = 0.6;
-        const val = cell.addText(fmtValue(p.item));
-        val.font = Font.boldSystemFont(15);
-        val.lineLimit = 1;
-        val.minimumScaleFactor = 0.6;
-      }
+  w.setPadding(0, 0, 0, 0);
+  const line = w.addStack();
+  line.layoutHorizontally();
+  line.topAlignContent();
+  const shown = rows.slice(0, 4);
+  shown.forEach((p, i) =&gt; {
+    if (i &gt; 0) line.addSpacer();
+    const cell = line.addStack();
+    cell.layoutVertically();
+    const ch = fmtChange(p.item);
+    const name = cell.addText(p.short);
+    name.font = Font.mediumSystemFont(9);
+    name.textOpacity = 0.75;
+    name.lineLimit = 1;
+    name.minimumScaleFactor = 0.6;
+    const val = cell.addText(fmtValue(p.item));
+    val.font = Font.boldSystemFont(12);
+    val.lineLimit = 1;
+    val.minimumScaleFactor = 0.5;
+    if (ch.text) {
+      const chg = cell.addText(ch.text);
+      chg.font = Font.mediumSystemFont(9);
+      chg.lineLimit = 1;
+      chg.minimumScaleFactor = 0.6;
     }
-    if (r === 0) grid.addSpacer(3);
-  }
+  });
   return w;
 }
 
